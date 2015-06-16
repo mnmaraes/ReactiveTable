@@ -358,7 +358,6 @@
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/ReactiveTable",
-					"/Users/Murillo/Projects/Unreasonable/Base/build/Debug-iphoneos",
 				);
 				INFOPLIST_FILE = ReactiveTable/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
@@ -378,7 +377,6 @@
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/ReactiveTable",
-					"/Users/Murillo/Projects/Unreasonable/Base/build/Debug-iphoneos",
 				);
 				INFOPLIST_FILE = ReactiveTable/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
@@ -437,6 +435,7 @@
 				EB81B9C71B30B99900DAFFA9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 		EB81B9C81B30B99900DAFFA9 /* Build configuration list for PBXNativeTarget "ReactiveTableTests" */ = {
 			isa = XCConfigurationList;
@@ -445,6 +444,7 @@
 				EB81B9CA1B30B99900DAFFA9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

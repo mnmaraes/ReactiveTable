@@ -17,15 +17,40 @@ public struct Overview<T> {
         self.store = store
     }
 
-    var sectionCount: Int { return store.count }
+    public var sectionCount: Int { return store.count }
 
     var first: [T] { return store[0] }
 
-    subscript(section: Int) -> [T] { return store[section] }
+    public subscript(section: Int) -> [T] { return store[section] }
 
-    subscript(section: Int, row: Int) -> T { return store[section][row] }
+    public subscript(section: Int, row: Int) -> T { return store[section][row] }
 
-    subscript(path: NSIndexPath) -> T { return self[path.section, path.row] }
+    public subscript(path: NSIndexPath) -> T { return self[path.section, path.row] }
+
+    public func reduce<U>(initial: U, combine: (U, [T]) -> U) -> U {
+        return self.store.reduce(initial, combine: combine)
+    }
+
+    public func isWithinBounds(path: NSIndexPath) -> Bool {
+        if path.section < store.count && path.row < store[path.section].count {
+            return true
+        }
+
+        return false
+    }
+}
+
+func find<T: Equatable>(item: T, inOverview overview: Overview<T>) -> NSIndexPath? {
+    return overview.store
+        .reduce((nil, 0)) { (step, section) -> (NSIndexPath?, Int) in
+            if step.1 == -1 {
+                return step
+            }else if let index = find(section, item) {
+                return (NSIndexPath(forRow: index, inSection: step.1), -1)
+            } else {
+                return (step.0, step.1 + 1)
+            }
+        }.0
 }
 
 //MARK: Protocols
@@ -39,7 +64,7 @@ public protocol ReactiveLayoutDataSource: IndexedDataSource {
     typealias CellType: UITableViewCell
 
     func identifierForItem(item: ItemType) -> String
-    func heightForItem(item: ItemType) -> CGFloat
+//    func heightForItem(item: ItemType) -> CGFloat
     func cellForItem(preConfiguredCell: CellType?, item: ItemType) -> CellType
 }
 
@@ -55,6 +80,7 @@ public protocol ReactiveSectionDataSource: IndexedDataSource {
 
 public protocol ReactiveActionDelegate {
     var willDisplayCellSignal: Signal<(UITableViewCell, NSIndexPath), NoError> { get }
+    var didEndDisplayingCellSignal: Signal<(UITableViewCell, NSIndexPath), NoError> { get }
     var didSelectSignal: Signal<NSIndexPath, NoError> { get }
 }
 
@@ -70,11 +96,19 @@ public struct LayoutDataSource<DataSourceType: ReactiveLayoutDataSource>: UITabl
         return reactiveDataSource.overview.value.first.count
     }
 
-    func heightForIndexPath(indexPath: NSIndexPath, inTableView tableView: UITableView) -> CGFloat {
-        return reactiveDataSource.heightForItem(reactiveDataSource.overview.value[indexPath])
-    }
+//    func heightForIndexPath(indexPath: NSIndexPath, inTableView tableView: UITableView) -> CGFloat {
+//        return reactiveDataSource.heightForItem(reactiveDataSource.overview.value[indexPath])
+//    }
 
     func cellForIndexPath(indexPath: NSIndexPath, inTableView tableView: UITableView) -> UITableViewCell {
+        let nSections = reactiveDataSource.overview.value.sectionCount
+
+        if nSections <= indexPath.section ||
+            reactiveDataSource.overview.value[indexPath.section].count <= indexPath.row  {
+                tableView.reloadData()
+                return UITableViewCell()
+        }
+
         let item = reactiveDataSource.overview.value[indexPath]
         let identifier = reactiveDataSource.identifierForItem(item)
 
@@ -123,23 +157,36 @@ public struct SectionDataSource<DataSourceType: ReactiveSectionDataSource>: UITa
 //MARK: Reactive Structs
 struct ActionDelegate: UITableViewActionDelegate, ReactiveActionDelegate {
     private let willDisplayCellAction: Action<(UITableViewCell, NSIndexPath), (UITableViewCell, NSIndexPath), NoError>
+    private let didEndDisplayingCellAction: Action<(UITableViewCell, NSIndexPath), (UITableViewCell, NSIndexPath), NoError>
     private let didSelectAction: Action<NSIndexPath, NSIndexPath, NoError>
 
     init() {
         willDisplayCellAction = Action { SignalProducer(value: $0) }
+        didEndDisplayingCellAction = Action { SignalProducer(value: $0) }
         didSelectAction = Action { SignalProducer(value: $0) }
     }
 
     var willDisplayCellSignal: Signal<(UITableViewCell, NSIndexPath), NoError> { return willDisplayCellAction.values }
+    var didEndDisplayingCellSignal: Signal<(UITableViewCell, NSIndexPath), NoError> { return didEndDisplayingCellAction.values }
     var didSelectSignal: Signal<NSIndexPath, NoError> { return didSelectAction.values }
 
     func willDisplayCell(cell: UITableViewCell, inTableView tableView: UITableView, atIndexPath indexPath: NSIndexPath) {
         willDisplayCellAction.apply(cell, indexPath) |> start()
     }
 
+    func didEndDisplayingCell(cell: UITableViewCell, inTableView tableView: UITableView, atIndexPath indexPath: NSIndexPath) {
+        didEndDisplayingCellAction.apply(cell, indexPath) |> start()
+    }
+
     func didSelect(tableView: UITableView, atIndexPath indexPath: NSIndexPath) {
         didSelectAction.apply(indexPath) |> start()
     }
+}
+
+public struct SignalDelegate<T> {
+    public let willDisplaySignal: Signal<(UITableViewCell, T), NoError>
+    public let didEndDisplayingSignal: Signal<(UITableViewCell, T), NoError>
+    public let didSelectSignal: Signal<T, NoError>
 }
 
 public extension UITableView {
@@ -148,7 +195,10 @@ public extension UITableView {
         Section: ReactiveSectionDataSource,
         T where
         T == Layout.ItemType,
-        T == Section.ItemType>(signal: Signal<[T], NoError>, layoutDataSource: Layout, sectionDataSource: Section? = nil) -> Disposable {
+        T == Section.ItemType>(signal: Signal<[T], NoError>,
+        layoutDataSource: Layout,
+        sectionDataSource: Section,
+        updateBlock: ((UITableView, Overview<T>, Overview<T>) -> Void)? = nil) -> SignalDelegate<T> {
 
             var layout = layoutDataSource
             var section = sectionDataSource
@@ -158,43 +208,148 @@ public extension UITableView {
             let sectionSource: SectionDataSource<Section>?
             let updateSignal: Signal<Overview<T>, NoError>
 
-            if let section = sectionDataSource {
-                var s = section
+                var s = sectionDataSource
                 updateSignal = signal |> map { Overview(store: Section.arrange($0)) }
 
-                s.overview = overview
-
                 sectionSource = SectionDataSource(reactiveDataSource: s)
-            } else {
-                updateSignal = signal |> map { Overview(store: [$0]) }
-
-                sectionSource = nil
-            }
 
             let firstDisposable = overview <~ updateSignal
 
-            layout.overview = overview
+            let delegate = ActionDelegate()
 
             let manager = DelegatedUITableViewManager(layoutDelegate: LayoutDataSource(reactiveDataSource: layout),
-                        sectionDelegate: sectionSource,
-                        actionDelegate: nil)
+                sectionDelegate: sectionSource,
+                actionDelegate: delegate)
+
+            manager.hold = overview
+
+            let defaultBlock:(UITableView, Overview<T>, Overview<T>) -> Void
+
+            if let update = updateBlock {
+                defaultBlock = update
+            } else {
+                defaultBlock = {table, _, _ in table.reloadData() }
+            }
 
             let secondDisposable = overview.producer
                 |> startOn(QueueScheduler.mainQueueScheduler)
                 |> observeOn(QueueScheduler.mainQueueScheduler)
-                |> on(started: { [unowned self] in
-                    self.delegate = manager
-                    self.dataSource = manager
-                }, next: { [unowned self] next in
-                    self.reloadData()
-                }, disposed: {
-                    self.delegate = nil
-                    self.dataSource = nil
+                |> on(started: { [weak self] in
+                    self?.delegate = manager
+                    self?.dataSource = manager
+                }, disposed: { [weak self] in
+                    self?.delegate = nil
+                    self?.dataSource = nil
                     manager.holdOn = nil
                 })
-                |> start()
+                |> combinePrevious(Overview(store: [[]]))
+                |> start(next: { [weak self] previous, next in
+                    s.overview.put(next)
+                    layout.overview.put(next)
 
-            return CompositeDisposable([firstDisposable, secondDisposable])
+                    if let weakSelf = self {
+                        defaultBlock(weakSelf, previous, next)
+                    }
+                })
+
+            let willDisplay = delegate.willDisplayCellSignal
+                |> map { ($0, s.overview.value[$1]) }
+
+            let didDisplay = delegate.didEndDisplayingCellSignal
+                |> map { ($0, s.overview.value[$1]) }
+
+            let didSelect = delegate.didSelectSignal
+                |> map { s.overview.value[$0] }
+
+            let sDelegate = SignalDelegate(willDisplaySignal: willDisplay,
+                didEndDisplayingSignal: didDisplay,
+                didSelectSignal: didSelect)
+
+            let disposable = CompositeDisposable([firstDisposable, secondDisposable])
+
+            self.rac_willDeallocSignal().toSignalProducer()
+                |> start(next: {_ in disposable.dispose() })
+
+            return sDelegate
+    }
+
+
+    public func updateWithSignal<Layout: ReactiveLayoutDataSource,
+        T where
+        T == Layout.ItemType>(signal: Signal<[T], NoError>,
+        layoutDataSource: Layout,
+        updateBlock: ((UITableView, Overview<T>, Overview<T>) -> Void)? = nil) -> SignalDelegate<T> {
+
+            var layout = layoutDataSource
+
+            let overview = MutableProperty<Overview<T>>(Overview(store: [[]]))
+
+            let updateSignal: Signal<Overview<T>, NoError>
+
+            updateSignal = signal |> map { Overview(store: [$0]) }
+
+            let firstDisposable = overview <~ updateSignal
+
+            let delegate = ActionDelegate()
+
+            let manager = DelegatedUITableViewManager(layoutDelegate: LayoutDataSource(reactiveDataSource: layout), actionDelegate: delegate)
+
+            manager.hold = overview
+
+            let defaultBlock:(UITableView, Overview<T>, Overview<T>) -> Void
+
+            if let update = updateBlock {
+                defaultBlock = update
+            } else {
+                defaultBlock = {table, _, _ in table.reloadData() }
+            }
+
+            let secondDisposable = overview.producer
+                |> startOn(QueueScheduler.mainQueueScheduler)
+                |> observeOn(QueueScheduler.mainQueueScheduler)
+                |> on(started: { [weak self] in
+                    self?.delegate = manager
+                    self?.dataSource = manager
+                    }, disposed: { [weak self] in
+                        self?.delegate = nil
+                        self?.dataSource = nil
+                        manager.holdOn = nil
+                    })
+                |> combinePrevious(Overview(store: [[]]))
+                |> start(next: { [weak self] previous, next in
+                    layout.overview.put(next)
+
+                    if let weakSelf = self {
+                        defaultBlock(weakSelf, previous, next)
+                    }
+                })
+
+
+            let willDisplay = delegate.willDisplayCellSignal
+                |> map {cell, path in
+                    return layout.overview.value.isWithinBounds(path) ? (cell, layout.overview.value[path]) : nil
+                }
+                |> ignoreNil
+
+            let didDisplay = delegate.didEndDisplayingCellSignal
+                |> map {cell, path in
+                    return layout.overview.value.isWithinBounds(path) ? (cell, layout.overview.value[path]) : nil
+                }
+                |> ignoreNil
+
+            let didSelect = delegate.didSelectSignal
+                |> map { layout.overview.value[$0] }
+
+            let sDelegate = SignalDelegate(willDisplaySignal: willDisplay,
+                didEndDisplayingSignal: didDisplay,
+                didSelectSignal: didSelect)
+
+            let disposable = CompositeDisposable([firstDisposable, secondDisposable])
+
+            self.rac_willDeallocSignal().toSignalProducer()
+                |> start(next: {_ in disposable.dispose() })
+
+            return sDelegate
     }
 }
 

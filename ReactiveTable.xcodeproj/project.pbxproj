@@ -12,9 +12,6 @@
 		EB81B9C21B30B99900DAFFA9 /* ReactiveTableTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB81B9C11B30B99900DAFFA9 /* ReactiveTableTests.swift */; };
 		EB81B9D71B30B9D500DAFFA9 /* UITableView+Reactive.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB81B9D51B30B9D500DAFFA9 /* UITableView+Reactive.swift */; };
 		EB81B9D81B30B9D500DAFFA9 /* UITableView+Separated.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB81B9D61B30B9D500DAFFA9 /* UITableView+Separated.swift */; };
-		EB81BA191B30BBBD00DAFFA9 /* Box.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EB81BA161B30BBBD00DAFFA9 /* Box.framework */; };
-		EB81BA1A1B30BBBD00DAFFA9 /* ReactiveCocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EB81BA171B30BBBD00DAFFA9 /* ReactiveCocoa.framework */; };
-		EB81BA1B1B30BBBD00DAFFA9 /* Result.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EB81BA181B30BBBD00DAFFA9 /* Result.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -46,9 +43,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				EB81BA1B1B30BBBD00DAFFA9 /* Result.framework in Frameworks */,
-				EB81BA191B30BBBD00DAFFA9 /* Box.framework in Frameworks */,
-				EB81BA1A1B30BBBD00DAFFA9 /* ReactiveCocoa.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
